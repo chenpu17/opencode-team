@@ -1,11 +1,15 @@
 function truthy(key: string) {
-  const value = process.env[key]?.toLowerCase()
-  return value === "true" || value === "1"
+  const value = process.env[key]
+  if (typeof value !== "string") return false
+  const lower = value.toLowerCase()
+  return lower === "true" || lower === "1"
 }
 
 function falsy(key: string) {
-  const value = process.env[key]?.toLowerCase()
-  return value === "false" || value === "0"
+  const value = process.env[key]
+  if (typeof value !== "string") return false
+  const lower = value.toLowerCase()
+  return lower === "false" || lower === "0"
 }
 
 export namespace Flag {
@@ -45,9 +49,11 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_ICON_DISCOVERY =
     OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
 
-  const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
+  const copyEnv = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
   export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT =
-    copy === undefined ? process.platform === "win32" : truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
+    copyEnv === undefined
+      ? process.platform === "win32"
+      : typeof copyEnv === "string" && (copyEnv.toLowerCase() === "true" || copyEnv.toLowerCase() === "1")
   export const OPENCODE_ENABLE_EXA =
     truthy("OPENCODE_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
   export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
@@ -65,52 +71,17 @@ export namespace Flag {
 
   function number(key: string) {
     const value = process.env[key]
-    if (!value) return undefined
+    if (typeof value !== "string") return undefined
     const parsed = Number(value)
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
 
-// Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
-// This must be evaluated at access time, not module load time,
-// because external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
-  get() {
-    return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
-  },
-  enumerable: true,
-  configurable: false,
-})
+function defineDynamic<T>(name: string, get: () => T) {
+  Object.defineProperty(Flag, name, { get, enumerable: true, configurable: false })
+}
 
-// Dynamic getter for OPENCODE_TUI_CONFIG
-// This must be evaluated at access time, not module load time,
-// because tests and external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_TUI_CONFIG", {
-  get() {
-    return process.env["OPENCODE_TUI_CONFIG"]
-  },
-  enumerable: true,
-  configurable: false,
-})
-
-// Dynamic getter for OPENCODE_CONFIG_DIR
-// This must be evaluated at access time, not module load time,
-// because external tooling may set this env var at runtime
-Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
-  get() {
-    return process.env["OPENCODE_CONFIG_DIR"]
-  },
-  enumerable: true,
-  configurable: false,
-})
-
-// Dynamic getter for OPENCODE_CLIENT
-// This must be evaluated at access time, not module load time,
-// because some commands override the client at runtime
-Object.defineProperty(Flag, "OPENCODE_CLIENT", {
-  get() {
-    return process.env["OPENCODE_CLIENT"] ?? "cli"
-  },
-  enumerable: true,
-  configurable: false,
-})
+defineDynamic("OPENCODE_DISABLE_PROJECT_CONFIG", () => truthy("OPENCODE_DISABLE_PROJECT_CONFIG"))
+defineDynamic("OPENCODE_TUI_CONFIG", () => process.env["OPENCODE_TUI_CONFIG"])
+defineDynamic("OPENCODE_CONFIG_DIR", () => process.env["OPENCODE_CONFIG_DIR"])
+defineDynamic("OPENCODE_CLIENT", () => process.env["OPENCODE_CLIENT"] ?? "cli")
