@@ -4,6 +4,7 @@ import z from "zod"
 import { Bus } from "../../bus"
 import { Session } from "../../session"
 import { TuiEvent } from "@/cli/cmd/tui/event"
+import { TeamStatus } from "@/team/status"
 import { AsyncQueue } from "../../util/queue"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -331,7 +332,7 @@ export const TuiRoutes = lazy(() =>
       validator(
         "json",
         z.union(
-          Object.values(TuiEvent).map((def) => {
+          [...Object.values(TuiEvent), TeamStatus.Event.Updated].map((def) => {
             return z
               .object({
                 type: z.literal(def.type),
@@ -345,7 +346,7 @@ export const TuiRoutes = lazy(() =>
       ),
       async (c) => {
         const evt = c.req.valid("json")
-        await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)!, evt.properties)
+        await Bus.publish([...Object.values(TuiEvent), TeamStatus.Event.Updated].find((def) => def.type === evt.type)!, evt.properties)
         return c.json(true)
       },
     )

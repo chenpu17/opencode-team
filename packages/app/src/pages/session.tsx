@@ -40,6 +40,7 @@ import { resetSessionModel, syncSessionModel } from "@/pages/session/session-mod
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { createSessionTeamStatus } from "@/pages/session/session-team-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { createSessionHistoryWindow, emptyUserMessages } from "@/pages/session/history-window"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -130,9 +131,12 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
+  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const team = createSessionTeamStatus(() => info()?.directory)
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
-  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const desktopTeamOpen = createMemo(() => isDesktop() && !!team())
+  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen() || desktopTeamOpen())
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`
@@ -169,7 +173,6 @@ export default function Page() {
     if (path) file.load(path)
   })
 
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
@@ -1206,6 +1209,7 @@ export default function Page() {
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
           size={size}
+          team={team}
         />
       </div>
 

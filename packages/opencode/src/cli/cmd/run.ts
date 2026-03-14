@@ -74,6 +74,10 @@ function fallback(part: ToolPart) {
   })
 }
 
+function quiet(part: ToolPart) {
+  return part.tool === "TeamStatus" && part.state.status === "completed"
+}
+
 function glob(info: ToolProps<typeof GlobTool>) {
   const root = info.input.path ?? ""
   const title = `Glob "${info.input.pattern}"`
@@ -462,6 +466,7 @@ export const RunCommand = cmd({
             if (part.sessionID !== sessionID) continue
 
             if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
+              if (quiet(part) && args.format !== "json") continue
               if (emit("tool_use", { part })) continue
               if (part.state.status === "completed") {
                 tool(part)

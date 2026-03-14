@@ -882,6 +882,79 @@ export type EventSessionError = {
   }
 }
 
+export type EventTeamUpdated = {
+  type: "team.updated"
+  properties: {
+    info: {
+      team_id: string
+      project_path: string
+      updated_at: number
+      execution: {
+        status: "idle" | "running" | "completed" | "error"
+        completed: number
+        total: number
+        progress: number
+      }
+      run: {
+        id: string
+        requirement: string
+        scope_summary: string
+        status: "running" | "completed" | "error" | "interrupted"
+        started_at: number
+        heartbeat_at: number
+        completed_at?: number
+        error?: string
+      } | null
+      summary: {
+        active: number
+        queued: number
+        failed: number
+        blocked: number
+        members: {
+          total: number
+          working: number
+          idle: number
+          error: number
+        }
+      }
+      focus: {
+        task_id: string
+        step_id: string
+        mode: "active" | "next"
+        task_title: string
+        step_title: string
+        module_path?: string
+        member_name?: string
+        files: Array<string>
+      } | null
+      members: Array<{
+        id: string
+        role: "pm" | "architect" | "engineer"
+        name: string
+        status: "idle" | "working" | "completed" | "error"
+        focus_mode?: "active" | "next" | "blocked"
+        module_path?: string
+        step_title?: string
+        file_label?: string
+        waiting_on?: string
+        waiting_on_member?: string
+      }>
+      tasks: Array<{
+        id: string
+        title: string
+        status: "pending" | "in_progress" | "completed" | "error"
+        queue_state?: "active" | "ready" | "blocked"
+        waiting_on?: string
+        waiting_on_member?: string
+        assigned_to?: string
+        module_path?: string
+        started_at?: number
+        completed_at?: number
+      }>
+    } | null
+  }
+}
+
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -994,6 +1067,7 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventTeamUpdated
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -4679,7 +4753,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect | EventTeamUpdated
   path?: never
   query?: {
     directory?: string
@@ -4906,6 +4980,91 @@ export type AppLogResponses = {
 }
 
 export type AppLogResponse = AppLogResponses[keyof AppLogResponses]
+
+export type AppTeamData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team"
+}
+
+export type AppTeamResponses = {
+  /**
+   * Current team status
+   */
+  200: {
+    team_id: string
+    project_path: string
+    updated_at: number
+    execution: {
+      status: "idle" | "running" | "completed" | "error"
+      completed: number
+      total: number
+      progress: number
+    }
+    run: {
+      id: string
+      requirement: string
+      scope_summary: string
+      status: "running" | "completed" | "error" | "interrupted"
+      started_at: number
+      heartbeat_at: number
+      completed_at?: number
+      error?: string
+    } | null
+    summary: {
+      active: number
+      queued: number
+      failed: number
+      blocked: number
+      members: {
+        total: number
+        working: number
+        idle: number
+        error: number
+      }
+    }
+    focus: {
+      task_id: string
+      step_id: string
+      mode: "active" | "next"
+      task_title: string
+      step_title: string
+      module_path?: string
+      member_name?: string
+      files: Array<string>
+    } | null
+    members: Array<{
+      id: string
+      role: "pm" | "architect" | "engineer"
+      name: string
+      status: "idle" | "working" | "completed" | "error"
+      focus_mode?: "active" | "next" | "blocked"
+      module_path?: string
+      step_title?: string
+      file_label?: string
+      waiting_on?: string
+      waiting_on_member?: string
+    }>
+    tasks: Array<{
+      id: string
+      title: string
+      status: "pending" | "in_progress" | "completed" | "error"
+      queue_state?: "active" | "ready" | "blocked"
+      waiting_on?: string
+      waiting_on_member?: string
+      assigned_to?: string
+      module_path?: string
+      started_at?: number
+      completed_at?: number
+    }>
+  } | null
+}
+
+export type AppTeamResponse = AppTeamResponses[keyof AppTeamResponses]
 
 export type AppAgentsData = {
   body?: never

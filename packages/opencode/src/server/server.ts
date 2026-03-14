@@ -17,6 +17,7 @@ import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill/skill"
+import { TeamStatus } from "../team/status"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
@@ -415,6 +416,27 @@ export namespace Server {
             }
 
             return c.json(true)
+          },
+        )
+        .get(
+          "/team",
+          describeRoute({
+            summary: "Get team status",
+            description: "Get virtual team members, execution progress, and task status for the current project.",
+            operationId: "app.team",
+            responses: {
+              200: {
+                description: "Current team status",
+                content: {
+                  "application/json": {
+                    schema: resolver(TeamStatus.Info.nullable()),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            return c.json(TeamStatus.current())
           },
         )
         .get(

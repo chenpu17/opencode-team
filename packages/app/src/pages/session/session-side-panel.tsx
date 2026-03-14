@@ -26,12 +26,14 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { StickyAddButton } from "@/pages/session/review-tab"
 import { setSessionHandoff } from "@/pages/session/handoff"
+import { SessionTeamPanel, type Team } from "@/pages/session/session-team-panel"
 
 export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
   size: Sizing
+  team: () => Team | null | undefined
 }) {
   const params = useParams()
   const layout = useLayout()
@@ -48,14 +50,15 @@ export function SessionSidePanel(props: {
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
-  const open = createMemo(() => reviewOpen() || fileOpen())
+  const hasTeam = createMemo(() => isDesktop() && !!props.team())
+  const open = createMemo(() => reviewOpen() || fileOpen() || hasTeam())
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
     return `${layout.fileTree.width()}px`
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const treeWidth = createMemo(() => (fileOpen() || hasTeam() ? `${layout.fileTree.width()}px` : "0px"))
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -371,11 +374,11 @@ export function SessionSidePanel(props: {
 
           <div
             id="file-tree-panel"
-            aria-hidden={!fileOpen()}
-            inert={!fileOpen()}
+            aria-hidden={!fileOpen() && !hasTeam()}
+            inert={!fileOpen() && !hasTeam()}
             class="relative min-w-0 h-full shrink-0 overflow-hidden"
             classList={{
-              "pointer-events-none": !fileOpen(),
+              "pointer-events-none": !fileOpen() && !hasTeam(),
               "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
                 !props.size.active(),
             }}
@@ -385,69 +388,74 @@ export function SessionSidePanel(props: {
               class="h-full flex flex-col overflow-hidden group/filetree"
               classList={{ "border-l border-border-weaker-base": reviewOpen() }}
             >
-              <Tabs
-                variant="pill"
-                value={fileTreeTab()}
-                onChange={setFileTreeTabValue}
-                class="h-full"
-                data-scope="filetree"
-              >
-                <Tabs.List>
-                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    {reviewCount()}{" "}
-                    {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {language.t("session.files.all")}
-                  </Tabs.Trigger>
-                </Tabs.List>
-                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
-                  <Switch>
-                    <Match when={hasReview()}>
-                      <Show
-                        when={diffsReady()}
-                        fallback={
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
-                            {language.t("common.loading")}
-                            {language.t("common.loading.ellipsis")}
-                          </div>
-                        }
-                      >
+              <Show when={hasTeam()}>
+                <SessionTeamPanel team={props.team} sidebar />
+              </Show>
+              <Show when={fileOpen()}>
+                <Tabs
+                  variant="pill"
+                  value={fileTreeTab()}
+                  onChange={setFileTreeTabValue}
+                  class="flex-1 min-h-0"
+                  data-scope="filetree"
+                >
+                  <Tabs.List>
+                    <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
+                      {reviewCount()}{" "}
+                      {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
+                      {language.t("session.files.all")}
+                    </Tabs.Trigger>
+                  </Tabs.List>
+                  <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
+                    <Switch>
+                      <Match when={hasReview()}>
+                        <Show
+                          when={diffsReady()}
+                          fallback={
+                            <div class="px-2 py-2 text-12-regular text-text-weak">
+                              {language.t("common.loading")}
+                              {language.t("common.loading.ellipsis")}
+                            </div>
+                          }
+                        >
+                          <FileTree
+                            path=""
+                            class="pt-3"
+                            allowed={diffFiles()}
+                            kinds={kinds()}
+                            draggable={false}
+                            active={props.activeDiff}
+                            onFileClick={(node) => props.focusReviewDiff(node.path)}
+                          />
+                        </Show>
+                      </Match>
+                      <Match when={true}>
+                        {empty(
+                          language.t(sync.project && !sync.project.vcs ? "session.review.noChanges" : reviewEmptyKey()),
+                        )}
+                      </Match>
+                    </Switch>
+                  </Tabs.Content>
+                  <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                    <Switch>
+                      <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                      <Match when={true}>
                         <FileTree
                           path=""
                           class="pt-3"
-                          allowed={diffFiles()}
+                          modified={diffFiles()}
                           kinds={kinds()}
-                          draggable={false}
-                          active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
+                          onFileClick={(node) => openTab(file.tab(node.path))}
                         />
-                      </Show>
-                    </Match>
-                    <Match when={true}>
-                      {empty(
-                        language.t(sync.project && !sync.project.vcs ? "session.review.noChanges" : reviewEmptyKey()),
-                      )}
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
-                  <Switch>
-                    <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
-                    <Match when={true}>
-                      <FileTree
-                        path=""
-                        class="pt-3"
-                        modified={diffFiles()}
-                        kinds={kinds()}
-                        onFileClick={(node) => openTab(file.tab(node.path))}
-                      />
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-              </Tabs>
+                      </Match>
+                    </Switch>
+                  </Tabs.Content>
+                </Tabs>
+              </Show>
             </div>
-            <Show when={fileOpen()}>
+            <Show when={fileOpen() || hasTeam()}>
               <div onPointerDown={() => props.size.start()}>
                 <ResizeHandle
                   direction="horizontal"

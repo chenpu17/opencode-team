@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createResource, createEffect, For, onCleanup, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,9 +11,86 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useSDK } from "../../context/sdk"
+
+type Team = {
+  team_id: string
+  project_path: string
+  updated_at: number
+  execution: {
+    status: "idle" | "running" | "completed" | "error"
+    completed: number
+    total: number
+    progress: number
+  }
+  resume: {
+    available: boolean
+    pending: number
+  }
+  run: {
+    id: string
+    requirement: string
+    scope_summary: string
+    status: "running" | "completed" | "error" | "interrupted"
+    phase?: "scoping" | "planning" | "investigating" | "executing" | "completed" | "error"
+    round?: number
+    started_at: number
+    heartbeat_at: number
+    completed_at?: number
+    error?: string
+  } | null
+  summary: {
+    active: number
+    queued: number
+    failed: number
+    blocked: number
+    members: {
+      total: number
+      working: number
+      idle: number
+      error: number
+    }
+  }
+  focus: {
+    task_id: string
+    step_id: string
+    mode: "active" | "next"
+    task_title: string
+    step_title: string
+    module_path?: string
+    member_name?: string
+    files: string[]
+  } | null
+  members: {
+    id: string
+    role: "pm" | "architect" | "engineer"
+    name: string
+    status: "idle" | "working" | "completed" | "error"
+    has_memory?: boolean
+    memory_updated_at?: number
+    focus_mode?: "active" | "next" | "blocked"
+    module_path?: string
+    step_title?: string
+    file_label?: string
+    waiting_on?: string
+    waiting_on_member?: string
+  }[]
+  tasks: {
+    id: string
+    kind?: "investigation" | "execution"
+    round?: number
+    title: string
+    status: "pending" | "in_progress" | "completed" | "error"
+    queue_state?: "active" | "ready" | "blocked"
+    waiting_on?: string
+    waiting_on_member?: string
+    module_path?: string
+  }[]
+}
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
+  const sdk = useSDK()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
@@ -21,10 +98,43 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
   const [expanded, setExpanded] = createStore({
+    team: true,
     mcp: true,
     diff: true,
     todo: true,
     lsp: true,
+  })
+
+  const source = createMemo(() => session()?.directory)
+  const [team, ctl] = createResource(source, async (dir) =>
+    sdk.client.app
+      .team({ directory: dir })
+      .then((res) => (res.data ?? null) as Team | null)
+      .catch(() => null),
+  )
+  const pace = (status?: Team["execution"]["status"] | null) => {
+    if (status === "running" || status === "error") return 15000
+    return 60000
+  }
+
+  createEffect(() => {
+    if (!source()) {
+      ctl.mutate(null)
+      return
+    }
+    void ctl.refetch()
+    const id = setInterval(() => {
+      void ctl.refetch()
+    }, pace(team()?.execution.status))
+    onCleanup(() => clearInterval(id))
+  })
+
+  createEffect(() => {
+    if (!source()) return
+    const stop = sdk.event.on("team.updated", (evt) => {
+      ctl.mutate(evt.properties.info as Team | null)
+    })
+    onCleanup(stop)
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -68,6 +178,65 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   )
   const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
 
+  const teamTone = (status: Team["execution"]["status"] | Team["members"][number]["status"] | Team["tasks"][number]["status"] | "blocked") => {
+    if (status === "completed") return theme.success
+    if (status === "working" || status === "in_progress" || status === "running") return theme.info
+    if (status === "error") return theme.error
+    return theme.warning
+  }
+
+  const teamLabel = (status: Team["execution"]["status"] | Team["members"][number]["status"] | Team["tasks"][number]["status"] | "blocked") => {
+    if (status === "in_progress") return "in progress"
+    return status
+  }
+  const taskTone = (item: Team["tasks"][number]) => teamTone(item.queue_state === "blocked" ? "blocked" : item.status)
+  const taskLabel = (item: Team["tasks"][number]) => teamLabel(item.queue_state === "blocked" ? "blocked" : item.status)
+
+  const taskTitle = (item: Team["tasks"][number]) => {
+    const text = item.module_path ?? item.title.split("\n")[0]?.split("：")[0]?.split(":")[0]?.trim() ?? item.title
+    return Locale.truncate(text, 28)
+  }
+  const phase = createMemo(() => team()?.run?.phase ?? "unknown")
+  const focusTitle = (item: NonNullable<Team["focus"]>) =>
+    Locale.truncate(item.module_path ?? item.task_title, 28)
+  const focusMeta = (item: NonNullable<Team["focus"]>) => {
+    const file = item.files.length === 1 ? path.basename(item.files[0]!) : `${item.files.length} files`
+    return [item.member_name, file].filter(Boolean).join(" · ")
+  }
+
+  const members = createMemo(() =>
+    [...(team()?.members ?? [])].sort((a, b) => {
+      const rank = (role: Team["members"][number]["role"]) => (role === "pm" ? 0 : role === "architect" ? 1 : 2)
+      return rank(a.role) - rank(b.role) || a.name.localeCompare(b.name)
+    }),
+  )
+  const memberMeta = (item: Team["members"][number]) =>
+    [
+      item.module_path && `${item.focus_mode ?? "next"} · ${path.basename(item.module_path)}`,
+      item.has_memory && `memory${item.memory_updated_at ? ` @ ${new Date(item.memory_updated_at).toLocaleTimeString()}` : ""}`,
+      item.file_label,
+      item.waiting_on && `waiting for ${item.waiting_on_member ? `${item.waiting_on_member} on ` : ""}${path.basename(item.waiting_on)}`,
+    ].filter(Boolean).join(" · ")
+  const taskMeta = (item: Team["tasks"][number]) =>
+    [
+      `${item.kind ?? "execution"} r${item.round ?? 1}`,
+      item.waiting_on
+        ? `waiting for ${item.waiting_on_member ? `${item.waiting_on_member} on ` : ""}${path.basename(item.waiting_on)}`
+        : "",
+    ].filter(Boolean).join(", ")
+
+  const queued = createMemo(() => team()?.summary.queued ?? 0)
+  const active = createMemo(() => team()?.summary.active ?? 0)
+  const blocked = createMemo(() => team()?.summary.blocked ?? 0)
+  const tasks = createMemo(() => {
+    const list = team()?.tasks ?? []
+    return list
+      .filter((item) => item.status !== "completed")
+      .filter((item) => item.id !== team()?.focus?.task_id)
+      .slice(0, 5)
+  })
+  const more = createMemo(() => Math.max(0, (team()?.tasks.length ?? 0) - tasks().length))
+
   return (
     <Show when={session()}>
       <box
@@ -98,6 +267,89 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.textMuted}>{session().share!.url}</text>
               </Show>
             </box>
+            <Show when={team()}>
+              <box>
+                <box flexDirection="row" gap={1} onMouseDown={() => setExpanded("team", !expanded.team)}>
+                  <text fg={theme.text}>{expanded.team ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>Team</b>
+                  </text>
+                  <text fg={teamTone(team()!.execution.status)}>{teamLabel(team()!.execution.status)}</text>
+                </box>
+                <Show when={expanded.team}>
+                  <text fg={theme.textMuted}>
+                    {team()!.execution.completed}/{team()!.execution.total} tasks
+                    {" · "}
+                    {team()!.execution.progress}% done
+                    <Show when={active() > 0}>
+                      {" · "}
+                      {active()} active
+                    </Show>
+                    <Show when={queued() > 0}>
+                      {" · "}
+                      {queued()} queued
+                    </Show>
+                    <Show when={blocked() > 0}>
+                      {" · "}
+                      {blocked()} blocked
+                    </Show>
+                  </text>
+                  <Show when={team()!.run}>
+                    <text fg={theme.textMuted}>
+                      {phase()} · round {team()!.run!.round ?? 1}
+                    </text>
+                  </Show>
+                  <Show when={team()!.resume.available}>
+                    <text fg={theme.warning}>resume available · {team()!.resume.pending} pending</text>
+                  </Show>
+                  <For each={members()}>
+                    {(item) => (
+                      <box flexDirection="row" gap={1}>
+                        <text fg={teamTone(item.status)}>•</text>
+                        <text fg={theme.text}>
+                          {item.name} <span style={{ fg: theme.textMuted }}>({item.role})</span>
+                          <Show when={memberMeta(item)}>
+                            <span style={{ fg: theme.textMuted }}> · {memberMeta(item)}</span>
+                          </Show>
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                  <Show when={team()!.focus}>
+                    <text fg={theme.text}>
+                      <b>{team()!.focus!.mode === "active" ? "Focus" : "Next"}</b>
+                    </text>
+                    <box flexDirection="row" gap={1}>
+                      <text fg={teamTone(team()!.focus!.mode === "active" ? "running" : "pending")}>•</text>
+                      <text fg={theme.text} wrapMode="none">
+                        {focusTitle(team()!.focus!)}
+                      </text>
+                    </box>
+                    <Show when={focusMeta(team()!.focus!).length > 0}>
+                      <text fg={theme.textMuted}>{focusMeta(team()!.focus!)}</text>
+                    </Show>
+                  </Show>
+                  <Show when={tasks().length > 0}>
+                    <text fg={theme.text}>
+                      <b>Queue</b>
+                    </text>
+                    <For each={tasks()}>
+                      {(item) => (
+                        <box flexDirection="row" gap={1}>
+                          <text fg={taskTone(item)}>•</text>
+                          <text fg={theme.text} wrapMode="none">
+                            {taskTitle(item)} <span style={{ fg: theme.textMuted }}>({taskLabel(item)}{taskMeta(item)})</span>
+                          </text>
+                        </box>
+                      )}
+                    </For>
+                    <Show when={more() > 0}>
+                      <text fg={theme.textMuted}>+{more()} more</text>
+                    </Show>
+                  </Show>
+                </Show>
+              </box>
+            </Show>
             <box>
               <text fg={theme.text}>
                 <b>Context</b>
