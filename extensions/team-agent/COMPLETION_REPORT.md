@@ -32,7 +32,7 @@
 ### 🎯 可用功能
 
 1. `/team_create` - 创建团队
-2. `/team_assign` - 分配任务
+2. `/team_run` - 启动任务
 3. `/team_status` - 查看状态
 
 ### 💡 技术特点

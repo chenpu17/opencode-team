@@ -1,11 +1,11 @@
 ---
 name: team_assign
-description: 分配任务给团队
+description: 已废弃；请改用 team_run
 ---
 
-# 分配任务给团队
+# 已废弃
 
-使用 TeamAssign 工具分配任务给已创建的团队。
+这是历史兼容 skill，当前应改用 `TeamRun`。
 
 ## 参数
 
@@ -13,7 +13,7 @@ description: 分配任务给团队
 
 ## 示例
 
-分配代码分析任务：
+推荐调用：
 ```
-使用 TeamAssign 工具，参数 requirement="分析项目代码质量"
+使用 TeamRun 工具，参数 requirement="分析项目代码质量"
 ```

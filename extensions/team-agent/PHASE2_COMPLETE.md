@@ -67,10 +67,10 @@
 ### 5. Plugin 工具
 
 **新增工具**：
-- `TeamAssign` - 分配任务给团队
+- `TeamRun` - 启动团队任务
 
 **Skill 定义**：
-- `/team_assign` - 任务分配命令
+- `/team_run` - 任务执行命令
 
 ## 📊 代码统计
 
@@ -100,7 +100,7 @@
 
 2. **分配任务**
    ```bash
-   /team_assign "添加登录功能"
+   /team_run "添加登录功能"
    # 输出：任务分配成功
    ```
 
@@ -115,7 +115,7 @@
 ```
 用户需求
   ↓
-TeamAssign 工具
+TeamRun 工具
   ↓
 ArchitectAgent (分解任务)
   ↓
@@ -176,7 +176,7 @@ Phase 2 已完成核心 Agent 层的实现：
 **成果**：
 - 完整的 Agent 架构（BaseAgent, EngineerAgent, ArchitectAgent）
 - 任务路由和依赖管理（TaskRouter）
-- 任务分配功能（TeamAssign）
+- 任务执行功能（TeamRun，兼容 TeamAssign）
 - 代码审核和修复（符合 AGENTS.md 规范）
 
 **代码质量**：

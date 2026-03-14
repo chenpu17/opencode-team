@@ -10,6 +10,16 @@ export default (async ({ client, project, directory }) => {
   await manager.init()
   log('Plugin', 'Team manager initialized')
 
+  const run = async (requirement: string, abort?: AbortSignal) => {
+    const tasks = await manager.assignTask(requirement, abort)
+    return JSON.stringify({
+      success: true,
+      status: 'executing',
+      message: `任务已启动，共 ${tasks.length} 个子任务正在后台执行中`,
+      tasks: tasks.length,
+    })
+  }
+
   return {
     tool: {
       TeamCreate: {
@@ -121,30 +131,16 @@ export default (async ({ client, project, directory }) => {
       },
 
       TeamAssign: {
-        description: "分配任务给团队（长时间运行任务，约20-30分钟）",
+        description: "已废弃的兼容入口；请改用 TeamRun",
         args: {
           requirement: z.string(),
         },
         execute: async (args, ctx) => {
           try {
             log('Plugin', 'TeamAssign called', { requirement: args.requirement })
-            const tasks = await manager.assignTask(args.requirement as string, ctx.abort)
-            log('Plugin', 'TeamAssign completed', { taskCount: tasks.length })
-
-            const logPath = '~/.local/share/opencode/log/team-agent.log'
-            return JSON.stringify({
-              success: true,
-              status: 'executing',
-              message: `任务已分配给团队，共${tasks.length}个子任务正在后台执行中`,
-              tasks: tasks.length,
-              estimatedTime: `预计需要 ${Math.ceil(tasks.length / 3 * 4)} 分钟`,
-              progress: {
-                hint: '侧边栏会自动刷新团队状态；除非用户明确要求，否则不要频繁调用 TeamStatus',
-                polling: '如需手动查询，建议间隔至少 30 秒',
-                stop: '用户按 Esc 中断当前会话时，会同步中断后台团队执行',
-                realtime: `实时进度查看：tail -f ${logPath}`
-              }
-            })
+            const result = await run(args.requirement as string, ctx.abort)
+            log('Plugin', 'TeamAssign completed')
+            return result
           } catch (error) {
             logError('Plugin', 'TeamAssign failed', error)
             return JSON.stringify({
@@ -163,13 +159,7 @@ export default (async ({ client, project, directory }) => {
         execute: async (args, ctx) => {
           try {
             log('Plugin', 'TeamRun called', { requirement: args.requirement })
-            const tasks = await manager.assignTask(args.requirement as string, ctx.abort)
-            return JSON.stringify({
-              success: true,
-              status: 'executing',
-              message: `任务已启动，共 ${tasks.length} 个子任务正在后台执行中`,
-              tasks: tasks.length,
-            })
+            return await run(args.requirement as string, ctx.abort)
           } catch (error) {
             logError('Plugin', 'TeamRun failed', error)
             return JSON.stringify({

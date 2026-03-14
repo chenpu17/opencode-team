@@ -37,7 +37,7 @@
   ↓
 TeamCreate - 创建团队，分析模块
   ↓
-TeamAssign - 分配任务
+TeamRun - 启动任务
   ↓
 ArchitectAgent - 分解为模块级任务
   ↓
@@ -76,7 +76,7 @@ bun run dev
 ### 使用工具
 在对话中说：
 - "创建一个团队" - 调用 TeamCreate
-- "分析项目代码" - 调用 TeamAssign
+- "分析项目代码" - 调用 TeamRun
 - "查看团队状态" - 调用 TeamStatus
 
 ## 技术细节
